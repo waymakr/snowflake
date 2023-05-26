@@ -1,0 +1,228 @@
+SELECT TABLE_SCHEMA, TABLE_NAME
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE COLUMN_NAME = 'ORGANISATION_ID'
+ORDER BY TABLE_SCHEMA, TABLE_NAME;
+
+-- Create Views with Organisation ID added to each table
+-- This will create each query separately. Copy the output below and run.
+use database P_NUT;
+
+
+SELECT 
+    'CREATE OR REPLACE VIEW "' || TABLE_SCHEMA || '"."VW_' || TABLE_NAME || '" AS ' ||
+    'SELECT t.*, o.ORGANISATION_ID FROM "' || TABLE_SCHEMA || '"."' || TABLE_NAME || '" t, "' || TABLE_SCHEMA || '".ORGANIZATION o;'
+FROM 
+    INFORMATION_SCHEMA.TABLES
+WHERE 
+    TABLE_NAME NOT IN ('ORGANIZATION', 'FIVETRAN_AUDIT')
+    AND TABLE_SCHEMA NOT IN ('FIVETRAN_BUY_SQQ_STAGING', 'INFORMATION_SCHEMA', 'PUBLIC')
+ORDER BY TABLE_SCHEMA, TABLE_NAME;
+    
+
+-- Output Queries > Copy and Paste to run
+-- CREATE OR REPLACE VIEW "ANITYA_OLYMPIC_PARK"."VW_ACCOUNT" AS SELECT t.*, o.ORGANISATION_ID FROM "ANITYA_OLYMPIC_PARK"."ACCOUNT" t, "ANITYA_OLYMPIC_PARK".ORGANIZATION o;
+
+
+-- REPORT STRUCTURE -- One Off
+create or replace TABLE ReportStructure (
+ID int
+,Description	VARCHAR(16777216)
+,SortOrder	INT
+,Calctype	INT
+,Statement	Varchar(2)
+,ReportSign	INT
+,Class	Varchar(10)
+,Parent INT
+);
+
+insert into ReportStructure values
+('1','Revenue','100','1','PL','1','REVENUE','3'),
+('2','Cost of Goods Sold','150','1','PL','-1','EXPENSE','3'),
+('3','GrossProfit','200','2','PL','1','PROFIT','4'),
+('4','Expenses','250','1','PL','-1','EXPENSE','4'),
+('5','Operating Expnses','300','1','PL','-1','EXPENSE','4'),
+('6','Personnel Expenses','350','1','PL','-1','EXPENSE','4'),
+('7','Administration Expenses','400','1','PL','-1','EXPENSE','4'),
+('8','EBITDA','450','1','PL','-1','EXPENSE','6'),
+('9','Depreciation & Amortisation','500','1','PL','-1','EXPENSE','6'),
+('10','EBIT','550','2','PL','1','PROFIT','8'),
+('11','Other Income & Expenses','600','1','PL','1','REVENUE','8'),
+('12','EBT','650','2','PL','1','PROFIT','10'),
+('13','Tax Expense','700','2','PL','1','EXPENSE','10'),
+('14','Net Profit after Tax','750','2','PL','1','PROFIT','0'),
+('15','Assets','1000','1','BS','1','ASSET','24'),
+('16','Current Assets','1050','1','BS','1','ASSET','11'),
+('17','Bank','1100','1','BS','1','ASSET','12'),
+('18','Prepayments','1150','1','BS','1','ASSET','12'),
+('19','Accounts Receivable','1200','1','BS','1','ASSET','12'),
+('20','Inventory','1250','1','BS','1','ASSET','12'),
+('21','Other Current Assets','1300','1','BS','1','ASSET','12'),
+('22','Non-Current Assets','1350','1','BS','1','ASSET','11'),
+('23','Fixed Assets','1400','1','BS','1','ASSET','18'),
+('24','Other Non-Current Assets','1450','1','BS','1','ASSET','18'),
+('25','Liabilities','1500','1','BS','1','LIABILITY','24'),
+('26','Current Liabilities','1550','1','BS','1','LIABILITY','24'),
+('27','Credit Cards','1600','1','BS','1','LIABILITY','24'),
+('28','Accounts Payable','1650','1','BS','1','LIABILITY','24'),
+('29','Taxation','1700','1','BS','1','LIABILITY','24'),
+('30','Other Current Liabilities','1750','1','BS','1','LIABILITY','24'),
+('31','Non-Current Liabilities','1800','1','BS','1','LIABILITY','24'),
+('32','Loans from Related Parties','1850','1','BS','1','LIABILITY','24'),
+('33','Other Non-Current Liabilities','1900','1','BS','1','LIABILITY','24'),
+('34','Net Assets','1950','2','BS','1','ASSET','0'),
+('35','Equity','2000','1','BS','1','EQUITY','0')
+
+;
+
+
+-- CREATE TABLE FOR REPORT STRUCTURE MAP_XERO
+create or replace TABLE COMMON.PUBLIC.ReportMap_Xero (
+Map_ID	INT
+,Xero_Account_Type	VARCHAR(16777216)
+,ReportStructure_ID	INT
+);
+
+insert into COMMON.PUBLIC.ReportMap_Xero values
+('1','Revenue','1'),
+('2','REVENUE','1'),
+('3','Sales','1'),
+('4','SALES','1'),
+('5','DirectCosts','2'),
+('6','DIRECTCOSTS','2'),
+('7','Expense','4'),
+('8','EXPENSE','4'),
+('9','Overheads','4'),
+('10','OVERHEADS','4'),
+('11','Depreciation','9'),
+('12','DEPRECIATN','9'),
+('13','OtherIncome','11'),
+('14','OTHERINCOME','11'),
+('15','Bank','17'),
+('16','BANK','17'),
+('17','Current','21'),
+('18','CURRENT','21'),
+('19','Prepayment','18'),
+('20','PREPAYMENT','18'),
+('21','Fixed','23'),
+('22','FIXED','23'),
+('23','Inventory','20'),
+('24','CurrentLiability','30'),
+('25','CURRLIAB','30'),
+('26','NonCurrent','31'),
+('27','TermLiability','31'),
+('28','TERMLIAB','31'),
+('29','Liability','33'),
+('30','LIABILITY','33'),
+('31','Equity','35'),
+('32','EQUITY','35');
+
+
+---- Create GL Account Dimemsion with ReportStructure Link
+create or replace VIEW P_NUT.REPORT.VW_DIM_GL_ACCOUNT as 
+select distinct a.*, a.CODE || ' ' || a.NAME as ACCOUNT_CODE_NAME, c.id as REPORTSTRUCTURE_ID
+from P_NUT.REPORT.VW_ACCOUNT a 
+left outer join COMMON.PUBLIC.REPORTMAP_XERO b on a.type = b.xero_account_type
+left outer join COMMON.PUBLIC.REPORTSTRUCTURE c on b.reportstructure_id = c.id; 
+
+
+
+
+
+
+
+--- CREATE FACT_BANK_TRANS
+create or replace view P_NUT.REPORT.VW_FACT_BANK_TRANS AS
+SELECT
+a.BANK_TRANSACTION_ID
+,TYPE
+,STATUS
+,REFERENCE
+,IS_RECONCILED
+,HAS_ATTACHMENTS
+,BATCH_PAYMENT_DATE
+,BATCH_PAYMENT_TYPE
+,BATCH_PAYMENT_STATUS
+,BATCH_PAYMENT_TOTAL_AMOUNT
+,BATCH_PAYMENT_UPDATED_DATE_UTC
+,BATCH_PAYMENT_IS_RECONCILED
+,BATCH_PAYMENT_ID
+,OVERPAYMENT_ID
+,PREPAYMENT_ID
+,DATE
+,LINE_AMOUNT_TYPES
+,SUB_TOTAL
+,TOTAL_TAX
+,TOTAL
+,CURRENCY_RATE
+,UPDATED_DATE_UTC
+,CURRENCY_CODE
+,URL
+,EXTERNAL_LINK_PROVIDER_NAME
+,BANK_ACCOUNT_ID
+,CONTACT_ID
+,a._FIVETRAN_SYNCED
+,a.ORGANISATION_ID
+,LINE_ITEM_ID
+,DESCRIPTION
+,QUANTITY
+,UNIT_AMOUNT
+,ACCOUNT_CODE
+,ITEM_CODE
+,TAX_TYPE
+,TAX_AMOUNT
+,LINE_AMOUNT
+
+from P_NUT.REPORT.VW_BANK_TRANSACTION a
+inner join P_NUT.REPORT.VW_BANK_TRANSACTION_LINE_ITEMS b on a.bank_transaction_id = b.bank_transaction_id
+and a.organisation_id = b.organisation_id;
+
+
+---- FACT INVOICE
+create or replace view P_NUT.REPORT.VW_FACT_INVOICE AS
+SELECT 
+a.INVOICE_ID
+,TYPE
+,INVOICE_NUMBER
+,REFERENCE
+,HAS_ERRORS
+,IS_DISCOUNTED
+,HAS_ATTACHMENTS
+,LINE_AMOUNT_TYPES
+,AMOUNT_DUE
+,AMOUNT_PAID
+,AMOUNT_CREDITED
+,CURRENCY_RATE
+,CISDEDUCTION
+,DATE
+,DUE_DATE
+,UPDATED_DATE_UTC
+,FULLY_PAID_ON_DATE
+,CURRENCY_CODE
+,STATUS
+,SUB_TOTAL
+,TOTAL_TAX
+,TOTAL
+,BRANDING_THEME_ID
+,SENT_TO_CONTACT
+,URL
+,PLANNED_PAYMENT_DATE
+,EXPECTED_PAYMENT_DATE
+,CONTACT_ID
+,a.ORGANISATION_ID
+,LINE_ITEM_ID
+,DESCRIPTION
+,UNIT_AMOUNT
+,TAX_TYPE
+,TAX_AMOUNT
+,LINE_AMOUNT
+,ACCOUNT_CODE
+,ITEM_CODE
+,DISCOUNT_ENTERED_AS_PERCENT
+,QUANTITY
+,VALIDATION_ERRORS
+,DISCOUNT_RATE
+,a._FIVETRAN_SYNCED
+
+from P_NUT.REPORT.VW_INVOICE a
+inner join P_NUT.REPORT.VW_INVOICE_LINE_ITEM b on a.invoice_id = b.invoice_id
+and a.organisation_id = b.organisation_id;
